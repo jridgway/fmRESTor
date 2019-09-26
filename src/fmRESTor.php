@@ -24,7 +24,7 @@ class fmRESTor
     /* --- Default options --- */
     private $tokenExpireTime = 14;
     private $sessionName = "fm-api-token";
-    private $logDir = __DIR__ . "/log/";
+    private $logDir = "/log/";
     private $logType = self::LOG_TYPE_DEBUG;
     private $allowInsecure = false;
 
@@ -38,7 +38,7 @@ class fmRESTor
     const LS_INFO = "info";
     const LS_WARNING = "warning";
 
-    const ERROR_RESPONSE_CODE = [400, 401, 403, 404, 405, 415, 500];
+    private $error_response_code = [400, 401, 403, 404, 405, 415, 500];
 
     /**
      * fmRESTor constructor.
@@ -206,7 +206,7 @@ class fmRESTor
      * @param array $scriptPrameters
      * @return bool|mixed
      */
-    public function runScript($scriptName, $scriptPrameters = null)
+    public function runScript($scriptName, $scriptPrameters = null, $fmAPIVersion = 17)
     {
         $this->setLogRowNumber();
 
@@ -225,17 +225,34 @@ class fmRESTor
             }
         }
 
-        $param = "";
-        if ($scriptPrameters !== null) {
-            $param = $this->convertParametersToString($scriptPrameters);
+
+        if($fmAPIVersion == 17) {
+            $param = "script.param=";
+            if ($scriptPrameters !== null) {
+                foreach($scriptPrameters as $key => $value) {
+                    $param .=  "<:" . rawurlencode($key) . ":=" . rawurlencode($value) . ":>";
+                }
+            }
+            $request = array(
+                "url" => "/fmi/data/v1/databases/" . rawurlencode($this->db) . "/layouts/" . rawurlencode($this->layout) . "/records/?script=" . rawurlencode($scriptName) . "&" . $param,
+                "method" => "GET",
+                "headers" => array(
+                    "Authorization: Bearer " . $this->token
+                )
+            );
+        } else {
+            $param = "";
+            if ($scriptPrameters !== null) {
+                $param = $this->convertParametersToString($scriptPrameters);
+            }
+            $request = array(
+                "url" => "/fmi/data/v1/databases/" . rawurlencode($this->db) . "/layouts/" . rawurlencode($this->layout) . "/script/" . rawurlencode($scriptName) . "?" . $param,
+                "method" => "GET",
+                "headers" => array(
+                    "Authorization: Bearer " . $this->token
+                )
+            );
         }
-        $request = array(
-            "url" => "/fmi/data/v1/databases/" . rawurlencode($this->db) . "/layouts/" . rawurlencode($this->layout) . "/script/" . rawurlencode($scriptName) . "?" . $param,
-            "method" => "GET",
-            "headers" => array(
-                "Authorization: Bearer " . $this->token
-            )
-        );
 
         $result = $this->callURL($request, $param);
         $response = $result["result"];
@@ -1540,9 +1557,9 @@ class fmRESTor
     // TODO comment
     private function isResultError($result)
     {
-        if (isset($result["status"]["http_code"]) && in_array($result["status"]["http_code"], self::ERROR_RESPONSE_CODE)) {
+        if (isset($result["status"]["http_code"]) && in_array($result["status"]["http_code"], $this->error_response_code)) {
             $errorCode = $result["result"]["messages"][0]["code"];
-            if ($errorCode == 1630) {
+            if ($errorCode == 1630) {var_dump($result);
                 // CAUGHT ERROR - IF USER CALL UNSUPPORTED FUNCTION FOR SELECTED FILEMAKER
                 $this->response(-107);
             } else {
